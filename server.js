@@ -1,16 +1,32 @@
 var express = require("express");
 var bodyParser = require("body-parser");
 var mongodb = require("mongodb");
+var cors = require('cors');
 var multiparty = require("connect-multiparty");
 objectId = require("mongodb").ObjectId;
+
+const corsOptions ={
+  origin:'http://localhost:3000', 
+  credentials:true,          
+  optionSuccessStatus:200
+}
+
 
 var app = express();
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(multiparty());
+app.use(cors(corsOptions));
+app.use(function(req,res,next){
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE,UPDATE"); 
+  res.setHeader("Access-Control-Allow-Headers", "content-type"); 
+  res.setHeader("Access-Control-Allow-Credentials", true); 
+  next();
+})
 
-var port = 8080;
+
+var port = 3001;
 app.listen(port);
 
 var db = new mongodb.Db(
@@ -19,13 +35,14 @@ var db = new mongodb.Db(
   {}
 );
 
-console.log("SERVIDOR ONLINE NA PORTA 8080");
+console.log(`SERVIDOR ONLINE NA PORTA${port}`);
+
 
 app.get("/", function (req, res) {
   res.send({ msg: "olá" });
 });
 
-//metodo post
+
 app.post("/api", function (req, res) {
   var dados = req.body;
   db.open(function (erro, mongoclient) {
@@ -61,7 +78,7 @@ app.get("/api", function (req, res) {
 //recuperar dados get by id
 app.get("/api/:id", function (req, res) {
   db.open(function (erro, mongoclient) {
-    mongoclient.collection("tarefas", function (erro, collection) {
+    mongoclient.collection("tarefas", function (erro, collection) {  
       collection.find(objectId(req.params.id)).toArray(function (erro, result) {
         if (erro) {
           res.status(400), json(erro);
@@ -73,45 +90,71 @@ app.get("/api/:id", function (req, res) {
     });
   });
 });
-
-//metodo put by id  para update
-app.put("/api/:id", function (req, res) {
-  db.open(function (err, mongoclient) {
+// get para busca
+app.get("/api/busca/:search", function (req, res) {
+  db.open(function (erro, mongoclient) {
     mongoclient.collection("tarefas", function (erro, collection) {
-      console.log("passou por aqui", erro);
-      collection.update(
-        { _id: objectId(req.params.id) },
-        {
-          $set: { descricao: req.body.descricao },
-          $set: { data: req.body.data },
-          $set: { complete: req.body.complete },
-        },
-        function (erro, records) {
-          if (erro) {
-            res.json(erro);
-          } else {
-            res.json(records);
-          }
-          mongoclient.close();
+      collection.find({task:{$regex: new RegExp (req.params.search,'i')}}).toArray(function (erro, result) {
+        if (erro) {
+          res.status(400), json(erro);
+        } else {
+          res.status(200).json(result);
         }
-      );
+      });
+      mongoclient.close();
     });
   });
 });
 
-//metodo delete by id  para update
+
+app.patch("/api/:id", function (req, res) {
+  let completed1=req.body.completed;
+  let hiden1=req.body.hiden;
+
+db.open(function (err, mongoclient) {
+  mongoclient.collection("tarefas", function (erro, collection) {
+    let newValues= {}
+
+    if(req.body.description){
+      newValues.description=req.body.description;
+    }
+    if(req.body.dueDate){
+      newValues.dueDate=req.body.dueDate;
+    }
+    if(req.body.completed !==null){
+      newValues.completed=completed1;
+    }
+    if(req.body.hiden!==null){
+      newValues.hiden=hiden1;
+    }
+    console.log(newValues)
+    collection.update(
+      { _id: objectId(req.params.id) },
+      {$set:newValues},
+      function (erro, records) {
+        if (erro) {
+          res.json(erro);
+        } else {
+          res.json(records);
+        }
+        mongoclient.close();
+      }
+    );
+  });
+});
+});
+
+
 
 app.delete("/api/:id", function (req, res) {
   db.open(function (erro, mongoclient) {
     mongoclient.collection("tarefas", function (erro, collection) {
-      console.log("passou por aqui", erro);
       collection.remove(
         { _id: objectId(req.params.id) },
         function (erro, records) {
           if (erro) {
             res.status(400), json(erro);
           } else {
-            // deleta todos os arquivos naquele id especifico
             res.status(200).json(records);
           }
           mongoclient.close();
